@@ -9,49 +9,8 @@ from dental.store import Store
 class App:
     def __init__(self, window):
         self.window, self.store, self.patient = window, Store(), None
-        window.title('Consultório Dental')
-        window.geometry('1100x750')
-        tabs = ttk.Notebook(window)
-        tabs.pack(fill='both', expand=True)
-        patients, agenda = ttk.Frame(tabs, padding=12), ttk.Frame(tabs, padding=12)
-        tabs.add(patients, text='Pacientes e prontuários')
-        tabs.add(agenda, text='Agenda')
-        self.list = ttk.Treeview(patients, columns=('name', 'contact'), show='headings', height=8)
-        self.list.heading('name', text='Paciente')
-        self.list.heading('contact', text='Contato')
-        self.list.pack(fill='x')
-        self.list.bind('<<TreeviewSelect>>', self.select)
-        bar = ttk.Frame(patients)
-        bar.pack(fill='x', pady=8)
-        for label, action in [('Novo paciente', self.new), ('Salvar cadastro', self.save), ('Anexar exame', self.attach), ('Backup de TODOS os pacientes', self.backup), ('Restaurar backup', self.restore)]:
-            ttk.Button(bar, text=label, command=lambda a=action: self.safe(a)).pack(side='left', padx=3)
-        self.name, self.contact = tk.StringVar(), tk.StringVar()
-        for label, var in [('Nome', self.name), ('Contato', self.contact)]:
-            ttk.Label(patients, text=label).pack(anchor='w')
-            ttk.Entry(patients, textvariable=var).pack(fill='x')
-        ttk.Label(patients, text='Anamnese / histórico de saúde').pack(anchor='w')
-        self.history = tk.Text(patients, height=4)
-        self.history.pack(fill='x')
-        self.records = tk.Text(patients, height=8, state='disabled')
-        self.records.pack(fill='both', expand=True, pady=6)
-        ttk.Button(patients, text='Registrar evolução / procedimento', command=lambda: self.safe(self.note)).pack(anchor='w')
-        self.exams = ttk.Treeview(patients, columns=('file',), show='headings', height=4)
-        self.exams.heading('file', text='Exames — clique duas vezes para abrir')
-        self.exams.pack(fill='x')
-        self.exams.bind('<Double-1>', lambda _: self.safe(self.open_exam))
-        ttk.Label(agenda, text='Agenda salva neste computador e incluída no backup completo.').pack(anchor='w')
-        toolbar = ttk.Frame(agenda)
-        toolbar.pack(fill='x', pady=12)
-        for label, action in [('Atualizar', self.refresh_events), ('Criar consulta', lambda: self.edit_event(False)), ('Alterar selecionada', lambda: self.edit_event(True)), ('Cancelar selecionada', self.cancel_event)]:
-            ttk.Button(toolbar, text=label, command=lambda a=action: self.safe(a)).pack(side='left', padx=4)
-        self.event_list = ttk.Treeview(agenda, columns=('start', 'end', 'title', 'status'), show='headings')
-        self.event_list.heading('start', text='Início')
-        self.event_list.heading('end', text='Fim')
-        self.event_list.heading('status', text='Situação')
-        self.event_list.heading('title', text='Agendamento')
-        self.event_list.pack(fill='both', expand=True)
-        self.status = tk.StringVar(value='Dados locais: ' + str(self.store.root))
-        ttk.Label(window, textvariable=self.status).pack(fill='x')
+        from dental.ui import build
+        build(self)
         self.reload()
         self.refresh_events()
 
@@ -63,11 +22,17 @@ class App:
 
     def reload(self):
         self.list.delete(*self.list.get_children())
+        query = self.search.get().strip().casefold()
         for ident, name, contact, _ in self.store.patients():
+            if query and query not in (name + ' ' + contact).casefold():
+                continue
             self.list.insert('', 'end', iid=ident, values=(name, contact))
 
     def new(self):
         self.patient = None
+        self.list.selection_remove(*self.list.selection())
+        self.patient_heading.set('Nova ficha')
+        self.patient_tabs.select(0)
         self.name.set('')
         self.contact.set('')
         self.history.delete('1.0', 'end')
@@ -79,6 +44,9 @@ class App:
             return
         self.patient = selected[0]
         row = self.store.db.execute('SELECT name,contact,history FROM patients WHERE id=?', (self.patient,)).fetchone()
+        if row is None:
+            return
+        self.patient_heading.set(row[0])
         self.name.set(row[0])
         self.contact.set(row[1])
         self.history.delete('1.0', 'end')
@@ -87,8 +55,11 @@ class App:
 
     def save(self):
         self.patient = self.store.save_patient(self.patient, self.name.get(), self.contact.get(), self.history.get('1.0', 'end-1c'))
+        self.search.set('')
         self.reload()
         self.list.selection_set(self.patient)
+        self.patient_heading.set(self.name.get().strip())
+        self.status.set('Cadastro salvo com sucesso')
 
     def require_patient(self):
         if not self.patient:
@@ -108,6 +79,7 @@ class App:
         self.require_patient()
         dialog = tk.Toplevel(self.window)
         dialog.title('Evolução do atendimento')
+        dialog.configure(bg='#10151f')
         text = tk.Text(dialog, width=65, height=16)
         text.pack(padx=12, pady=12)
         def save():
@@ -163,7 +135,7 @@ class App:
             self.event_list.insert('', 'end', iid=ident, values=(
                 datetime.fromisoformat(start).strftime('%d/%m/%Y %H:%M'),
                 datetime.fromisoformat(end).strftime('%d/%m/%Y %H:%M'),
-                title, status))
+                title, status), tags=('cancelled',) if status == 'Cancelada' else ())
 
     def selected_event(self):
         selected = self.event_list.selection()
@@ -179,6 +151,7 @@ class App:
         start, end = datetime.fromisoformat(event[2]), datetime.fromisoformat(event[3])
         dialog = tk.Toplevel(self.window)
         dialog.title('Alterar consulta' if editing else 'Nova consulta')
+        dialog.configure(bg='#10151f')
         fields = []
         for label, value in [('Paciente / título', event[1]), ('Data (DD/MM/AAAA)', start.strftime('%d/%m/%Y')), ('Início (HH:MM)', start.strftime('%H:%M')), ('Fim (HH:MM)', end.strftime('%H:%M'))]:
             ttk.Label(dialog, text=label).pack(anchor='w', padx=16, pady=(10, 0))

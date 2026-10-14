@@ -2,6 +2,10 @@
 
 Aplicativo desktop para Windows com interface nativa Tkinter. Cadastro, anamnese, evoluções e anexos ficam em `%LOCALAPPDATA%\ConsultorioDental`. Prontuários e agenda funcionam sem internet. Nenhum dado é enviado à nuvem.
 
+## Aparência e navegação
+
+Interface escura com menu lateral para Pacientes, Agenda e Backup. A lista de pacientes possui busca por nome ou contato; a ficha divide Cadastro, Evoluções e Exames em abas. Para atualizar o executável, gere-o novamente com `build-windows.bat` e substitua somente o EXE; os dados continuam na pasta local do usuário.
+
 ## Executar e gerar o EXE no Windows
 
 Instale Python 3.12 para Windows (incluindo Tcl/Tk e o launcher `py`). Execute `build-windows.bat`. O resultado será `dist\ConsultorioDental.exe`, que abre uma janela própria. O EXE precisa ser gerado e validado no Windows; não foi produzido pelo ambiente Linux.
