@@ -5,9 +5,10 @@ import zipfile
 import tempfile
 import shutil
 from pathlib import Path
+from dental.clinical import ClinicalStore
 
 
-class Store:
+class Store(ClinicalStore):
     def __init__(self, root=None):
         self.root = Path(root or Path(os.getenv('LOCALAPPDATA', Path.home())) / 'ConsultorioDental')
         self.root.mkdir(parents=True, exist_ok=True)
@@ -21,6 +22,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS appointments(id TEXT PRIMARY KEY, title TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, status TEXT NOT NULL);
         ''')
         self.db.commit()
+        self.init_clinical()
 
     def patients(self):
         return self.db.execute('SELECT * FROM patients ORDER BY name COLLATE NOCASE').fetchall()
@@ -112,6 +114,17 @@ class Store:
                     raise ValueError('Banco de dados inválido.')
                 conn.execute('SELECT id,name,contact,history FROM patients').fetchall()
                 conn.execute('SELECT id,patient,created,body FROM notes').fetchall()
+                tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if 'anamnesis' in tables:
+                    import json
+                    for patient, data in conn.execute('SELECT patient,data FROM anamnesis'):
+                        if not isinstance(json.loads(data), dict):
+                            raise ValueError('Anamnese inválida no backup.')
+                if 'procedures' in tables:
+                    from dental.clinical import TEETH, PROCEDURES, SURFACES
+                    for target, kind, surface, status in conn.execute('SELECT target,kind,surface,status FROM procedures'):
+                        if target not in TEETH | {'Boca'} or kind not in PROCEDURES or surface not in SURFACES or status not in ('Planejado', 'Realizado'):
+                            raise ValueError('Procedimento inválido no backup.')
                 # Backups da primeira versão não possuem agenda local.
                 conn.execute('CREATE TABLE IF NOT EXISTS appointments(id TEXT PRIMARY KEY, title TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, status TEXT NOT NULL)')
                 from datetime import datetime
@@ -147,4 +160,5 @@ class Store:
             finally:
                 self.db = sqlite3.connect(self.root / 'patients.sqlite')
                 self.db.execute('PRAGMA foreign_keys=ON')
+                self.init_clinical()
             return recovery

@@ -7,8 +7,8 @@ from dental.store import Store
 
 
 class App:
-    def __init__(self, window):
-        self.window, self.store, self.patient = window, Store(), None
+    def __init__(self, window, store=None):
+        self.window, self.store, self.patient = window, store or Store(), None
         from dental.ui import build
         build(self)
         self.reload()
@@ -37,6 +37,7 @@ class App:
         self.contact.set('')
         self.history.delete('1.0', 'end')
         self.show_records()
+        self.anamnesis_form.load()
 
     def select(self, _=None):
         selected = self.list.selection()
@@ -52,6 +53,7 @@ class App:
         self.history.delete('1.0', 'end')
         self.history.insert('1.0', row[2])
         self.show_records()
+        self.anamnesis_form.load()
 
     def save(self):
         self.patient = self.store.save_patient(self.patient, self.name.get(), self.contact.get(), self.history.get('1.0', 'end-1c'))
@@ -70,6 +72,8 @@ class App:
         self.records.delete('1.0', 'end')
         for created, body in self.store.db.execute('SELECT created,body FROM notes WHERE patient=? ORDER BY created', (self.patient,)):
             self.records.insert('end', created + ' UTC\n' + body + '\n\n')
+        for target, kind, surface, status, body, created in self.store.procedures(self.patient):
+            self.records.insert('end', f'{created} UTC • {status}\n{target if target == "Boca" else "Dente " + target} • {kind} • {surface}\n{body}\n\n')
         self.records.config(state='disabled')
         self.exams.delete(*self.exams.get_children())
         for ident, name in self.store.db.execute('SELECT id,name FROM exams WHERE patient=?', (self.patient,)):
@@ -89,6 +93,19 @@ class App:
         ttk.Button(dialog, text='Salvar', command=lambda: self.safe(save)).pack(pady=8)
         dialog.transient(self.window)
         dialog.grab_set()
+
+    def odontogram(self):
+        from dental.clinical_ui import Odontogram
+        Odontogram(self)
+
+    def logout(self):
+        if not messagebox.askyesno('Sair', 'Encerrar a sessão? Salve os formulários antes de sair.'):
+            return
+        for child in self.window.winfo_children():
+            child.destroy()
+        self.window.minsize(520, 560)
+        from dental.auth import Auth, login
+        login(self.window, Auth(self.store.root), lambda: App(self.window, self.store))
 
     def attach(self):
         self.require_patient()
@@ -182,5 +199,7 @@ class App:
 
 if __name__ == '__main__':
     window = tk.Tk()
-    App(window)
+    from dental.auth import Auth, login
+    store = Store()
+    login(window, Auth(store.root), lambda: App(window, store))
     window.mainloop()

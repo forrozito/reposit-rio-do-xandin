@@ -46,6 +46,12 @@ def theme(window):
     style.configure('TNotebook.Tab', background=FIELD, foreground=MUTED, padding=(20, 12))
     style.map('TNotebook.Tab', background=[('selected', PANEL)], foreground=[('selected', ACCENT)])
     style.configure('Vertical.TScrollbar', background=FIELD, troughcolor=BG, borderwidth=0, arrowcolor=MUTED)
+    style.configure('TRadiobutton', background=BG, foreground=TEXT, padding=5)
+    style.map('TRadiobutton', background=[('active', FIELD)], indicatorcolor=[('selected', ACCENT), ('!selected', FIELD)])
+    style.configure('TCombobox', fieldbackground=FIELD, foreground=TEXT, arrowcolor=TEXT, padding=8)
+    style.map('TCombobox', fieldbackground=[('readonly', FIELD)], foreground=[('readonly', TEXT)], selectbackground=[('readonly', FIELD)], selectforeground=[('readonly', TEXT)])
+    window.option_add('*TCombobox*Listbox.background', FIELD)
+    window.option_add('*TCombobox*Listbox.foreground', TEXT)
 
 
 def button(parent, label, action, app, style='TButton'):
@@ -89,9 +95,10 @@ def build(app):
             nav[key].configure(style='Active.Nav.TButton' if key == name else 'Nav.TButton')
         pages[name].pack(fill='both', expand=True)
     for name in pages:
-        nav[name] = ttk.Button(sidebar, text=name, style='Nav.TButton', command=lambda n=name: navigate(n))
+        nav[name] = ttk.Button(sidebar, text='Prontuários' if name == 'Pacientes' else name, style='Nav.TButton', command=lambda n=name: navigate(n))
         nav[name].pack(fill='x', padx=12, pady=4)
     tk.Label(sidebar, text='●  Dados neste computador\nFuncionamento offline', bg=PANEL, fg=MUTED, justify='left', font=('Segoe UI', 10)).pack(side='bottom', anchor='w', padx=24, pady=26)
+    ttk.Button(sidebar, text='Sair / bloquear', style='Nav.TButton', command=app.logout).pack(side='bottom', fill='x', padx=12, pady=12)
     def heading(page, title, description):
         ttk.Label(page, text=title, style='Title.TLabel').pack(anchor='w')
         ttk.Label(page, text=description, style='Muted.TLabel', wraplength=760).pack(anchor='w', pady=(6, 22))
@@ -116,9 +123,11 @@ def build(app):
     notebook = ttk.Notebook(detail)
     notebook.pack(fill='both', expand=True)
     app.patient_tabs = notebook
-    registration, evolution, exams = [ttk.Frame(notebook, padding=18) for _ in range(3)]
-    for page, title in [(registration, 'Cadastro'), (evolution, 'Evoluções'), (exams, 'Exames')]:
+    registration, anamnesis, evolution, exams = [ttk.Frame(notebook, padding=18) for _ in range(4)]
+    for page, title in [(registration, 'Cadastro'), (anamnesis, 'Anamnese'), (evolution, 'Evolução'), (exams, 'Exames')]:
         notebook.add(page, text=title)
+    from dental.clinical_ui import Anamnesis
+    app.anamnesis_form = Anamnesis(app, anamnesis)
     app.name, app.contact = tk.StringVar(), tk.StringVar()
     for label, var in [('Nome completo', app.name), ('Telefone / contato', app.contact)]:
         ttk.Label(registration, text=label).pack(anchor='w', pady=(0, 6))
@@ -131,7 +140,8 @@ def build(app):
     button(bar, 'Salvar cadastro', app.save, app, 'Accent.TButton')
     bar = ttk.Frame(evolution)
     bar.pack(fill='x', pady=(0, 16))
-    button(bar, '+ Registrar atendimento', app.note, app, 'Accent.TButton')
+    button(bar, 'Odontograma / procedimento', app.odontogram, app, 'Accent.TButton')
+    button(bar, 'Nota geral', app.note, app)
     app.records = tk.Text(evolution, height=12, state='disabled', wrap='word')
     app.records.pack(fill='both', expand=True)
     bar = ttk.Frame(exams)
